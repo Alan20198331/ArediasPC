@@ -5,7 +5,7 @@ Browse Pokémon from every generation, set up your own team of 6, and see their 
 
 ---
 
-## ✨ Features
+## Features
 
 - **Browse all Pokémon** across Generations I–IX, powered by the [PokéAPI](https://pokeapi.co/)
 - **Filter** by name, type, and region (Kanto -> Paldea)
