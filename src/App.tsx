@@ -6,7 +6,7 @@ import {
   PokemonDetails,
   GENERATIONS
 } from './services/pokeApi';
-import { getBestAvailableSet, getSetsForPokemon, SmogonMoveset } from './services/smogonApi';
+import { getBestAvailableSet, SmogonMoveset } from './services/smogonApi';
 import { calculateTeamWeaknesses, getPokemonMultiplier, ALL_TYPES_LIST } from './utils/typeMath';
 import { t, Language } from './utils/i18n';
 import sunImg from './resources/sun.png';
