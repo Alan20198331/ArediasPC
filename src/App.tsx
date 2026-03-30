@@ -12,6 +12,7 @@ import { t, Language } from './utils/i18n';
 import sunImg from './resources/sun.png';
 import moonImg from './resources/moon.png';
 import { Search, Server, AlertTriangle, ShieldAlert, Swords } from 'lucide-react';
+import { Dex } from '@pkmn/dex';
 
 const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('en');
@@ -38,6 +39,7 @@ const App: React.FC = () => {
 
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [typeMap, setTypeMap] = useState<Record<string, string[]>>({});
 
   const REGION_RANGES: Record<string, [number, number]> = {
     kanto: [1, 151],
@@ -54,7 +56,19 @@ const App: React.FC = () => {
 
   // Initial Data Load
   useEffect(() => {
-    fetchPokemonList(generation.maxId).then(setPokemonList);
+    fetchPokemonList(generation.maxId).then(list => {
+      setPokemonList(list);
+      // Build a name -> types[] map using @pkmn/dex static data
+      const dex = Dex.forGen(generation.gen);
+      const map: Record<string, string[]> = {};
+      for (const p of list) {
+        const species = dex.species.get(p.name);
+        if (species?.exists) {
+          map[p.name] = species.types.map((t: string) => t.toLowerCase());
+        }
+      }
+      setTypeMap(map);
+    });
   }, [generation]);
 
   // Handler for adding/removing pokemon
@@ -126,16 +140,13 @@ const App: React.FC = () => {
       }
 
       if (selectedType !== 'all') {
-        const cached = team.find(t => t.id === p.id);
-        if (!cached) return false;
-
-        const hasType = cached.types.some(t => t.type.name === selectedType);
-        if (!hasType) return false;
+        const types = typeMap[p.name];
+        if (!types || !types.includes(selectedType.toLowerCase())) return false;
       }
 
       return true;
     });
-  }, [pokemonList, searchTerm, selectedRegion, selectedType, team]);
+  }, [pokemonList, searchTerm, selectedRegion, selectedType, typeMap]);
 
   // Apply body theme class
   useEffect(() => {
@@ -247,7 +258,7 @@ const App: React.FC = () => {
                 <option value="all">{t('typeAll', lang)}</option>
                 {ALL_TYPES_LIST.map(type => (
                   <option key={type} value={type}>
-                    {type}
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
                   </option>
                 ))}
               </select>
