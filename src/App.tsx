@@ -14,11 +14,25 @@ import moonImg from './resources/moon.png';
 import { Search, Server, AlertTriangle, ShieldAlert, Swords } from 'lucide-react';
 import { Dex } from '@pkmn/dex';
 
+const SINGLES_TIERS = ['AG', 'Uber', 'OU', 'UUBL', 'UU', 'RUBL', 'RU', 'NUBL', 'NU', 'PUBL', 'PU', 'ZUBL', 'ZU', 'NFE', 'LC Uber', 'LC'];
+const DOUBLES_TIERS = ['DUber', 'DOU', 'DBL', 'DUU', 'NFE', 'LC Uber', 'LC'];
+const cleanTier = (t?: string) => t ? t.replace(/[^a-zA-Z\s]/g, '') : '';
+const getRank = (tier: string | undefined, format: string) => {
+  const cleaned = cleanTier(tier);
+  if (!cleaned) return -1;
+  if (format === 'doubles') {
+    const idx = DOUBLES_TIERS.indexOf(cleaned);
+    return idx === -1 ? -1 : idx;
+  }
+  const idx = SINGLES_TIERS.indexOf(cleaned);
+  return idx === -1 ? -1 : idx;
+};
+
 const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('en');
   const [theme, setTheme] = useState('dark');
   const [generation, setGeneration] = useState(GENERATIONS[8]);
-  const [format, setFormat] = useState('ou');
+  const [format, setFormat] = useState('singles');
   const [pokemonList, setPokemonList] = useState<PokemonListResult[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -39,6 +53,8 @@ const App: React.FC = () => {
 
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [selectedForm, setSelectedForm] = useState<string>('all');
+  const [selectedTier, setSelectedTier] = useState<string>('all');
   const [typeMap, setTypeMap] = useState<Record<string, string[]>>({});
 
   const REGION_RANGES: Record<string, [number, number]> = {
@@ -54,19 +70,39 @@ const App: React.FC = () => {
     paldea: [906, 1025]
   };
 
+  // Helper to categorize form
+  const getFormCategory = (forme?: string, name?: string, baseSpecies?: string) => {
+    if (!forme || name === baseSpecies) return 'base';
+    if (forme.startsWith('Mega')) return 'mega';
+    if (forme === 'Alola') return 'alola';
+    if (forme === 'Galar') return 'galar';
+    if (forme === 'Hisui') return 'hisui';
+    if (forme === 'Paldea') return 'paldea';
+    if (forme === 'Gmax') return 'gmax';
+    return 'other';
+  };
+
   // Initial Data Load
   useEffect(() => {
-    fetchPokemonList(generation.maxId).then(list => {
-      setPokemonList(list);
-      // Build a name -> types[] map using @pkmn/dex static data
+    fetchPokemonList().then(list => {
       const dex = Dex.forGen(generation.gen);
       const map: Record<string, string[]> = {};
+      const validPokemon: PokemonListResult[] = [];
+      
       for (const p of list) {
         const species = dex.species.get(p.name);
         if (species?.exists) {
-          map[p.name] = species.types.map((t: string) => t.toLowerCase());
+          if (species.gen <= generation.gen) {
+            map[p.name] = species.types.map((t: string) => t.toLowerCase());
+            p.num = species.num;
+            p.formCategory = getFormCategory(species.forme, species.name, species.baseSpecies);
+            p.tier = species.tier;
+            p.doublesTier = species.doublesTier;
+            validPokemon.push(p);
+          }
         }
       }
+      setPokemonList(validPokemon);
       setTypeMap(map);
     });
   }, [generation]);
@@ -136,7 +172,20 @@ const App: React.FC = () => {
         if (!range) return true;
 
         const [min, max] = range;
-        if (p.id < min || p.id > max) return false;
+        const numToUse = p.num || p.id;
+        if (numToUse < min || numToUse > max) return false;
+      }
+
+      if (selectedForm !== 'all') {
+        if (p.formCategory !== selectedForm) return false;
+      }
+
+      if (selectedTier !== 'all' && format !== 'vgc') {
+        const pTier = format === 'doubles' ? p.doublesTier : p.tier;
+        const pRank = getRank(pTier, format);
+        const selectedRank = getRank(selectedTier, format);
+        // Only show Pokemon who have a tier ranking >= the selected tier's ranking
+        if (pRank < selectedRank) return false;
       }
 
       if (selectedType !== 'all') {
@@ -146,7 +195,45 @@ const App: React.FC = () => {
 
       return true;
     });
-  }, [pokemonList, searchTerm, selectedRegion, selectedType, typeMap]);
+  }, [pokemonList, searchTerm, selectedRegion, selectedForm, selectedTier, selectedType, format, typeMap]);
+
+  const { availableForms, availableRegions } = useMemo(() => {
+    const forms = new Set<string>();
+    const regions = new Set<string>();
+    forms.add('all');
+    forms.add('base');
+    regions.add('all');
+    
+    for (const p of pokemonList) {
+      if (selectedTier !== 'all' && format !== 'vgc') {
+        const pTier = format === 'doubles' ? p.doublesTier : p.tier;
+        const pRank = getRank(pTier, format);
+        const selectedRank = getRank(selectedTier, format);
+        if (pRank < selectedRank) continue;
+      }
+      if (p.formCategory) {
+        forms.add(p.formCategory);
+      }
+      if (p.num) {
+         if (p.num >= 1 && p.num <= 151) regions.add('kanto');
+         if (p.num >= 152 && p.num <= 251) regions.add('johto');
+         if (p.num >= 252 && p.num <= 386) regions.add('hoenn');
+         if (p.num >= 387 && p.num <= 493) regions.add('sinnoh');
+         if (p.num >= 494 && p.num <= 649) regions.add('unova');
+         if (p.num >= 650 && p.num <= 721) regions.add('kalos');
+         if (p.num >= 722 && p.num <= 809) regions.add('alola');
+         if (p.num >= 810 && p.num <= 905) regions.add('galar');
+         if (p.num >= 899 && p.num <= 905) regions.add('hisui');
+         if (p.num >= 906 && p.num <= 1025) regions.add('paldea');
+      }
+    }
+    return { availableForms: forms, availableRegions: regions };
+  }, [pokemonList, selectedTier, format]);
+
+  useEffect(() => {
+    if (selectedForm !== 'all' && !availableForms.has(selectedForm)) setSelectedForm('all');
+    if (selectedRegion !== 'all' && !availableRegions.has(selectedRegion)) setSelectedRegion('all');
+  }, [availableForms, availableRegions, selectedForm, selectedRegion]);
 
   // Apply body theme class
   useEffect(() => {
@@ -157,7 +244,7 @@ const App: React.FC = () => {
   // Reset page when filtering or changing generation
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, generation]);
+  }, [searchTerm, selectedRegion, selectedType, selectedForm, selectedTier, format, generation]);
 
   const totalPages = Math.ceil(filteredList.length / itemsPerPage);
   const paginatedList = useMemo(() => {
@@ -225,12 +312,47 @@ const App: React.FC = () => {
           <select
             className="glass-select"
             value={format}
-            onChange={(e) => setFormat(e.target.value)}
+            onChange={(e) => {
+              setFormat(e.target.value);
+              setSelectedTier('all');
+            }}
           >
-            <option value="ou">{t('singlesLabel', lang)}</option>
-            <option value="doublesou">{t('doublesLabel', lang)}</option>
+            <option value="singles">{t('singlesLabel', lang)}</option>
+            <option value="doubles">{t('doublesLabel', lang)}</option>
             <option value="vgc">{t('vgcLabel', lang)}</option>
           </select>
+
+          {/* TIER FILTER */}
+          {format !== 'vgc' && (
+            <select
+              className="glass-select"
+              value={selectedTier}
+              onChange={(e) => setSelectedTier(e.target.value)}
+            >
+              <option value="all">{t('tierAll', lang)}</option>
+              {format === 'singles' && (
+                <>
+                  <option value="Ubers">{t('tierUbers', lang)}</option>
+                  <option value="OU">{t('tierOU', lang)}</option>
+                  <option value="UU">{t('tierUU', lang)}</option>
+                  <option value="RU">{t('tierRU', lang)}</option>
+                  <option value="NU">{t('tierNU', lang)}</option>
+                  <option value="PU">{t('tierPU', lang)}</option>
+                  <option value="ZU">{t('tierZU', lang)}</option>
+                  <option value="LC">{t('tierLC', lang)}</option>
+                  <option value="NFE">{t('tierNFE', lang)}</option>
+                </>
+              )}
+              {format === 'doubles' && (
+                <>
+                  <option value="DUber">{t('tierDUbers', lang)}</option>
+                  <option value="DOU">{t('tierDOU', lang)}</option>
+                  <option value="DUU">{t('tierDUU', lang)}</option>
+                  <option value="NFE">{t('tierNFE', lang)}</option>
+                </>
+              )}
+            </select>
+          )}
         </div>
       </header>
 
@@ -247,7 +369,7 @@ const App: React.FC = () => {
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
 
               {/* TYPE FILTER */}
               <select
@@ -282,11 +404,31 @@ const App: React.FC = () => {
                   'galar',
                   'hisui',
                   'paldea'
-                ].map(region => (
-                  <option key={region} value={region}>
-                    {t(region, lang)}
-                  </option>
-                ))}
+                ].map(region => {
+                  if (!availableRegions.has(region)) return null;
+                  return (
+                    <option key={region} value={region}>
+                      {t(region, lang)}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* FORM FILTER */}
+              <select
+                className="glass-select"
+                value={selectedForm}
+                onChange={(e) => setSelectedForm(e.target.value)}
+              >
+                <option value="all">{t('formsAll', lang)}</option>
+                {availableForms.has('base') && <option value="base">{t('formBase', lang)}</option>}
+                {availableForms.has('mega') && <option value="mega">{t('formMega', lang)}</option>}
+                {availableForms.has('gmax') && <option value="gmax">{t('formGmax', lang)}</option>}
+                {availableForms.has('alola') && <option value="alola">{t('formAlola', lang)}</option>}
+                {availableForms.has('galar') && <option value="galar">{t('formGalar', lang)}</option>}
+                {availableForms.has('hisui') && <option value="hisui">{t('formHisui', lang)}</option>}
+                {availableForms.has('paldea') && <option value="paldea">{t('formPaldea', lang)}</option>}
+                {availableForms.has('other') && <option value="other">{t('formOther', lang)}</option>}
               </select>
 
             </div>
@@ -328,7 +470,7 @@ const App: React.FC = () => {
         </section>
 
         {/* Team Roster Panel */}
-        <section className="glass-panel team-roster">
+        <section className="glass-panel team-roster" style={{ overflowY: 'auto', minHeight: 0 }}>
           {[0, 1, 2, 3, 4, 5].map(i => {
             const member = team[i];
             return (
