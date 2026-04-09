@@ -15,6 +15,20 @@ export interface SmogonFormatData {
   };
 }
 
+export interface SmogonUsageResult {
+  usage: {
+    raw: number;
+    real: number;
+    weighted: number;
+  };
+  rank?: number;
+}
+
+export interface SmogonUsageData {
+  battles: number;
+  pokemon: Record<string, SmogonUsageResult>;
+}
+
 export interface SmogonSearchResult {
   sets: Record<string, SmogonMoveset>;
   formatUsed: string;
@@ -22,7 +36,8 @@ export interface SmogonSearchResult {
   isFromPreviousGen: boolean;
 }
 
-const CACHE: Record<string, SmogonFormatData> = {};
+const SETS_CACHE: Record<string, SmogonFormatData> = {};
+const USAGE_CACHE: Record<string, SmogonUsageData> = {};
 
 // Tier priority (Singles)
 const TIER_PRIORITY = [
@@ -46,8 +61,8 @@ const DOUBLES_PRIORITY = [
 // Fetch all sets for a format
 // -----------------------------
 export const fetchSmogonSets = async (format: string = "gen9ou"): Promise<SmogonFormatData> => {
-  if (CACHE[format]) {
-    return CACHE[format];
+  if (SETS_CACHE[format]) {
+    return SETS_CACHE[format];
   }
 
   try {
@@ -59,7 +74,7 @@ export const fetchSmogonSets = async (format: string = "gen9ou"): Promise<Smogon
     }
 
     const data = await response.json();
-    CACHE[format] = data;
+    SETS_CACHE[format] = data;
     return data;
 
   } catch (error) {
@@ -149,4 +164,30 @@ export const getBestAvailableSet = async (
   }
 
   return null;
+};
+
+// -----------------------------
+// Fetch monthly usage stats
+// -----------------------------
+export const fetchSmogonUsage = async (format: string = "gen9ou"): Promise<SmogonUsageData | null> => {
+  if (USAGE_CACHE[format]) {
+    return USAGE_CACHE[format];
+  }
+
+  try {
+    const response = await fetch(`https://data.pkmn.cc/stats/${format}.json`);
+
+    if (!response.ok) {
+      console.warn(`Usage stats for ${format} not found`);
+      return null;
+    }
+
+    const data = await response.json();
+    USAGE_CACHE[format] = data as SmogonUsageData;
+    return data;
+
+  } catch (error) {
+    console.error("Failed to fetch smogon usage:", error);
+    return null;
+  }
 };

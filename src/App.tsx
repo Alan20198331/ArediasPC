@@ -6,7 +6,12 @@ import {
   PokemonDetails,
   GENERATIONS
 } from './services/pokeApi';
-import { getBestAvailableSet, SmogonMoveset } from './services/smogonApi';
+import {
+  getBestAvailableSet,
+  SmogonMoveset,
+  fetchSmogonUsage,
+  SmogonUsageData
+} from './services/smogonApi';
 import { calculateTeamWeaknesses, getPokemonMultiplier, ALL_TYPES_LIST } from './utils/typeMath';
 import { t, Language } from './utils/i18n';
 import sunImg from './resources/sun.png';
@@ -44,6 +49,8 @@ const App: React.FC = () => {
 
   const [movesets, setMovesets] = useState<Record<string, SmogonMoveset>>({});
   const [loadingSets, setLoadingSets] = useState(false);
+  const [usageData, setUsageData] = useState<SmogonUsageData | null>(null);
+  const [loadingRecs, setLoadingRecs] = useState(false);
 
   const [meta, setMeta] = useState<{
     format: string;
@@ -160,6 +167,25 @@ const App: React.FC = () => {
 
   }, [selectedTeamMember, format, generation]);
 
+  // Fetch Usage Statistics for Recommendations
+  useEffect(() => {
+    setLoadingRecs(true);
+    
+    // Determine the base format for usage stats
+    const prefix = `gen${generation.gen}`;
+    const tier = selectedTier !== 'all' ? selectedTier.toLowerCase() : 'ou';
+    const targetFormat = format === 'singles' 
+      ? `${prefix}${tier}` 
+      : format === 'doubles'
+        ? `${prefix}doublesou`
+        : `${prefix}vgc`;
+
+    fetchSmogonUsage(targetFormat).then(data => {
+      setUsageData(data);
+      setLoadingRecs(false);
+    });
+  }, [format, generation, selectedTier]);
+
   const filteredList = useMemo(() => {
     return pokemonList.filter(p => {
 
@@ -255,6 +281,71 @@ const App: React.FC = () => {
     const types = team.map(p => p.types.map(t => t.type.name));
     return calculateTeamWeaknesses(types);
   }, [team]);
+
+  const recommendations = useMemo(() => {
+    if (team.length === 0 || !usageData || !usageData.pokemon) return [];
+
+    // 1. Calculate Type Gaps: (Weakness Count - Resistance Count)
+    const gaps: Record<string, number> = {};
+    const teamTypes = team.map(p => p.types.map(t => t.type.name));
+    
+    ALL_TYPES_LIST.forEach(type => {
+      let score = 0;
+      teamTypes.forEach(pTypes => {
+        const mult = getPokemonMultiplier(pTypes, type);
+        if (mult > 1) score += 1;
+        else if (mult < 1) score -= 1;
+      });
+      gaps[type] = score;
+    });
+
+    // 2. Filter and Score Pokémon in pokemonList
+    const candidates = pokemonList
+      .filter(p => !team.find(tm => tm.id === p.id))
+      .filter(p => {
+        if (selectedTier !== 'all' && format !== 'vgc') {
+          const pTier = format === 'doubles' ? p.doublesTier : p.tier;
+          const pRank = getRank(pTier, format);
+          const selectedRank = getRank(selectedTier, format);
+          return pRank >= selectedRank;
+        }
+        return true;
+      });
+
+    const scored = candidates.map(p => {
+      const pTypes = typeMap[p.name] || [];
+      const usageEntry = Object.entries(usageData.pokemon).find(
+        ([name]) => name.toLowerCase().replace(/[^a-z0-9]/g, '') === p.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+      );
+      const usage = usageEntry ? usageEntry[1].usage.weighted : 0;
+      
+      let coverageScore = 0;
+      ALL_TYPES_LIST.forEach(type => {
+        if (gaps[type] > 0) {
+          const mult = getPokemonMultiplier(pTypes, type);
+          if (mult < 1) coverageScore += gaps[type];
+          if (mult === 0) coverageScore += gaps[type] * 0.5;
+        }
+      });
+
+      // Penalize NFE pokemon with very low usage unless the tier is LC/NFE
+      const isNFE = p.tier === 'NFE' || p.tier === 'LC' || p.name.includes('-nfe');
+      const isRelevantTier = selectedTier === 'LC' || selectedTier === 'NFE';
+      const nfePenalty = (isNFE && !isRelevantTier && usage < 0.001) ? -100 : 0;
+
+      return {
+        ...p,
+        coverageScore,
+        usage,
+        totalScore: (coverageScore * 5) + (usage * 100) + nfePenalty
+      };
+    })
+    .filter(p => p.coverageScore > 0 && p.totalScore > -50);
+
+    return scored
+      .sort((a, b) => b.usage !== a.usage ? b.usage - a.usage : b.coverageScore - a.coverageScore)
+      .slice(0, 6);
+  }, [team, pokemonList, usageData, typeMap, selectedTier, format]);
 
   const criticalWeaknesses = Object.entries(teamWeaknessMatrix).filter(([_, count]) => count >= 3);
 
@@ -721,6 +812,68 @@ const App: React.FC = () => {
                       ))}
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* TEAM RECOMMENDATIONS */}
+              <div style={{
+                background: 'var(--pc-bg)',
+                opacity: 0.9,
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--pc-border)',
+                marginTop: '16px'
+              }}>
+                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                  <Search size={20} /> {t('recommendationsTitle', lang)}
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--pc-text)', opacity: 0.6, marginBottom: '16px' }}>
+                  {t('recsDescription', lang)}
+                </p>
+
+                {loadingRecs ? (
+                  <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('loadingRecs', lang)}</p>
+                ) : recommendations.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
+                    {recommendations.map(p => (
+                      <div
+                        key={p.name}
+                        onClick={() => addToTeam(p)}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.05)',
+                          border: '1px solid var(--pc-border)',
+                          borderRadius: '8px',
+                          padding: '10px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}
+                        className="recommendation-card"
+                      >
+                        <img 
+                          src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-viii/icons/${p.id}.png`}
+                          alt={p.name}
+                          style={{ imageRendering: 'pixelated', width: '40px' }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+                          }}
+                        />
+                        <span style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'capitalize', textAlign: 'center' }}>
+                          {p.name.replace('-', ' ')}
+                        </span>
+                        <span style={{ fontSize: '11px', opacity: 0.6 }}>
+                          {t('usageRate', lang, { rate: (p.usage * 100).toFixed(1) })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('noSets', lang)}</p>
                 )}
               </div>
             </>

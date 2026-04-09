@@ -60,6 +60,10 @@ export const i18nDict: Record<Language, Record<string, string>> = {
     unova: "Unova",
     vgcLabel: "VGC",
     weakText: "weak",
+    recommendationsTitle: "Team Recommendations",
+    recsDescription: "High-usage Pokémon that cover your team's current weaknesses.",
+    usageRate: "Usage: {rate}%",
+    loadingRecs: "Calculating recommendations...",
   },
 
   es: {
@@ -121,6 +125,10 @@ export const i18nDict: Record<Language, Record<string, string>> = {
     unova: "Teselia",
     vgcLabel: "VGC",
     weakText: "débil",
+    recommendationsTitle: "Recomendaciones de Equipo",
+    recsDescription: "Pokémon de alto uso que cubren las debilidades actuales de tu equipo.",
+    usageRate: "Uso: {rate}%",
+    loadingRecs: "Calculando recomendaciones...",
   },
 
   fr: {
@@ -182,6 +190,10 @@ export const i18nDict: Record<Language, Record<string, string>> = {
     unova: "Unys",
     vgcLabel: "VGC",
     weakText: "faible",
+    recommendationsTitle: "Recommandations d'Équipe",
+    recsDescription: "Pokémon très utilisés qui couvrent les faiblesses actuelles de votre équipe.",
+    usageRate: "Usage : {rate}%",
+    loadingRecs: "Calcul des recommandations...",
   },
 
   ja: {
@@ -243,7 +255,11 @@ export const i18nDict: Record<Language, Record<string, string>> = {
     unova: "イッシュ",
     vgcLabel: "VGC",
     weakText: "弱点",
-  }
+    recommendationsTitle: "チームの推奨ポケモン",
+    recsDescription: "現在のチームの弱点を補完する、使用率の高いポケモンです。",
+    usageRate: "使用率: {rate}%",
+    loadingRecs: "推奨ポケモンを計算中...",
+  },
 };
 export const t = (key: string, lang: Language, params?: Record<string, string | number>) => {
   let text = i18nDict[lang]?.[key] || i18nDict['en'][key] || key;
