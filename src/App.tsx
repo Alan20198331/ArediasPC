@@ -12,11 +12,25 @@ import {
   fetchSmogonUsage,
   SmogonUsageData
 } from './services/smogonApi';
-import { calculateTeamWeaknesses, getPokemonMultiplier, ALL_TYPES_LIST } from './utils/typeMath';
+import {
+  calculateTeamWeaknesses,
+  calculateTeamStrengths,
+  getPokemonMultiplier,
+  ALL_TYPES_LIST
+} from './utils/typeMath';
 import { t, Language } from './utils/i18n';
 import sunImg from './resources/sun.png';
 import moonImg from './resources/moon.png';
-import { Search, Server, AlertTriangle, ShieldAlert, Swords } from 'lucide-react';
+import {
+  Search,
+  Server,
+  AlertTriangle,
+  ShieldAlert,
+  Swords,
+  Trash2,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
 import { Dex } from '@pkmn/dex';
 
 const SINGLES_TIERS = ['AG', 'Uber', 'OU', 'UUBL', 'UU', 'RUBL', 'RU', 'NUBL', 'NU', 'PUBL', 'PU', 'ZUBL', 'ZU', 'NFE', 'LC Uber', 'LC'];
@@ -51,6 +65,11 @@ const App: React.FC = () => {
   const [loadingSets, setLoadingSets] = useState(false);
   const [usageData, setUsageData] = useState<SmogonUsageData | null>(null);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
+    weaknesses: false,
+    strengths: false,
+    recommendations: false
+  });
 
   const [meta, setMeta] = useState<{
     format: string;
@@ -95,7 +114,7 @@ const App: React.FC = () => {
       const dex = Dex.forGen(generation.gen);
       const map: Record<string, string[]> = {};
       const validPokemon: PokemonListResult[] = [];
-      
+
       for (const p of list) {
         const species = dex.species.get(p.name);
         if (species?.exists) {
@@ -134,6 +153,11 @@ const App: React.FC = () => {
     }
   };
 
+  const clearTeam = () => {
+    setTeam([]);
+    setSelectedTeamMember(null);
+  };
+
   // Fetch Smogon sets when selected team member or format changes
   useEffect(() => {
     if (!selectedTeamMember) {
@@ -170,12 +194,12 @@ const App: React.FC = () => {
   // Fetch Usage Statistics for Recommendations
   useEffect(() => {
     setLoadingRecs(true);
-    
+
     // Determine the base format for usage stats
     const prefix = `gen${generation.gen}`;
     const tier = selectedTier !== 'all' ? selectedTier.toLowerCase() : 'ou';
-    const targetFormat = format === 'singles' 
-      ? `${prefix}${tier}` 
+    const targetFormat = format === 'singles'
+      ? `${prefix}${tier}`
       : format === 'doubles'
         ? `${prefix}doublesou`
         : `${prefix}vgc`;
@@ -229,7 +253,7 @@ const App: React.FC = () => {
     forms.add('all');
     forms.add('base');
     regions.add('all');
-    
+
     for (const p of pokemonList) {
       if (selectedTier !== 'all' && format !== 'vgc') {
         const pTier = format === 'doubles' ? p.doublesTier : p.tier;
@@ -241,16 +265,16 @@ const App: React.FC = () => {
         forms.add(p.formCategory);
       }
       if (p.num) {
-         if (p.num >= 1 && p.num <= 151) regions.add('kanto');
-         if (p.num >= 152 && p.num <= 251) regions.add('johto');
-         if (p.num >= 252 && p.num <= 386) regions.add('hoenn');
-         if (p.num >= 387 && p.num <= 493) regions.add('sinnoh');
-         if (p.num >= 494 && p.num <= 649) regions.add('unova');
-         if (p.num >= 650 && p.num <= 721) regions.add('kalos');
-         if (p.num >= 722 && p.num <= 809) regions.add('alola');
-         if (p.num >= 810 && p.num <= 905) regions.add('galar');
-         if (p.num >= 899 && p.num <= 905) regions.add('hisui');
-         if (p.num >= 906 && p.num <= 1025) regions.add('paldea');
+        if (p.num >= 1 && p.num <= 151) regions.add('kanto');
+        if (p.num >= 152 && p.num <= 251) regions.add('johto');
+        if (p.num >= 252 && p.num <= 386) regions.add('hoenn');
+        if (p.num >= 387 && p.num <= 493) regions.add('sinnoh');
+        if (p.num >= 494 && p.num <= 649) regions.add('unova');
+        if (p.num >= 650 && p.num <= 721) regions.add('kalos');
+        if (p.num >= 722 && p.num <= 809) regions.add('alola');
+        if (p.num >= 810 && p.num <= 905) regions.add('galar');
+        if (p.num >= 899 && p.num <= 905) regions.add('hisui');
+        if (p.num >= 906 && p.num <= 1025) regions.add('paldea');
       }
     }
     return { availableForms: forms, availableRegions: regions };
@@ -282,13 +306,18 @@ const App: React.FC = () => {
     return calculateTeamWeaknesses(types);
   }, [team]);
 
+  const teamStrengthsMatrix = useMemo(() => {
+    const types = team.map(p => p.types.map(t => t.type.name));
+    return calculateTeamStrengths(types);
+  }, [team]);
+
   const recommendations = useMemo(() => {
     if (team.length === 0 || !usageData || !usageData.pokemon) return [];
 
     // 1. Calculate Type Gaps: (Weakness Count - Resistance Count)
     const gaps: Record<string, number> = {};
     const teamTypes = team.map(p => p.types.map(t => t.type.name));
-    
+
     ALL_TYPES_LIST.forEach(type => {
       let score = 0;
       teamTypes.forEach(pTypes => {
@@ -318,7 +347,7 @@ const App: React.FC = () => {
         ([name]) => name.toLowerCase().replace(/[^a-z0-9]/g, '') === p.name.toLowerCase().replace(/[^a-z0-9]/g, '')
       );
       const usage = usageEntry ? usageEntry[1].usage.weighted : 0;
-      
+
       let coverageScore = 0;
       ALL_TYPES_LIST.forEach(type => {
         if (gaps[type] > 0) {
@@ -340,7 +369,7 @@ const App: React.FC = () => {
         totalScore: (coverageScore * 5) + (usage * 100) + nfePenalty
       };
     })
-    .filter(p => p.coverageScore > 0 && p.totalScore > -50);
+      .filter(p => p.coverageScore > 0 && p.totalScore > -50);
 
     return scored
       .sort((a, b) => b.usage !== a.usage ? b.usage - a.usage : b.coverageScore - a.coverageScore)
@@ -542,26 +571,66 @@ const App: React.FC = () => {
             ))}
           </div>
           {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+              {/* First */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                style={{ padding: '6px 10px', background: currentPage === 1 ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1, fontSize: '13px' }}
+              >«</button>
+              {/* Prev */}
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                style={{ padding: '6px 12px', background: currentPage === 1 ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}
+                style={{ padding: '6px 12px', background: currentPage === 1 ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1, fontSize: '13px' }}
               >{t('prevBtn', lang)}</button>
-              <span style={{ fontSize: '14px', color: 'var(--pc-text)' }}>
+              <span style={{ fontSize: '13px', color: 'var(--pc-text)', whiteSpace: 'nowrap' }}>
                 {t('pageText', lang, { current: currentPage, total: totalPages })}
               </span>
+              {/* Next */}
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                style={{ padding: '6px 12px', background: currentPage === totalPages ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}
+                style={{ padding: '6px 12px', background: currentPage === totalPages ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.4 : 1, fontSize: '13px' }}
               >{t('nextBtn', lang)}</button>
+              {/* Last */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                style={{ padding: '6px 10px', background: currentPage === totalPages ? 'transparent' : 'rgba(56, 189, 248, 0.2)', border: '1px solid var(--pc-border)', borderRadius: '6px', color: 'var(--pc-text)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.4 : 1, fontSize: '13px' }}
+              >»</button>
             </div>
           )}
         </section>
 
         {/* Team Roster Panel */}
-        <section className="glass-panel team-roster" style={{ overflowY: 'auto', minHeight: 0 }}>
+        <section className="glass-panel team-roster" style={{ overflowY: 'auto', minHeight: 0, position: 'relative' }}>
+          {team.length > 0 && (
+            <button
+              onClick={clearTeam}
+              title={t('clearTeam', lang)}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: '8px',
+                padding: '6px',
+                cursor: 'pointer',
+                color: '#ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)')}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
           {[0, 1, 2, 3, 4, 5].map(i => {
             const member = team[i];
             return (
@@ -759,121 +828,188 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <div style={{
-                background: 'var(--pc-bg)',
-                opacity: 0.9,
-                padding: '16px',
-                borderRadius: '12px',
-                border: '1px solid var(--pc-border)',
-                flex: 1
-              }}>
-                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px' }}>
-                  <ShieldAlert size={20} /> {t('teamWeaknesses', lang)}
-                </h3>
+              <div className="analysis-section glass-panel">
+                <div
+                  className="section-header"
+                  onClick={() => setCollapsed(prev => ({ ...prev, weaknesses: !prev.weaknesses }))}
+                >
+                  <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <ShieldAlert size={20} /> {t('teamWeaknesses', lang)}
+                  </h3>
+                  {collapsed.weaknesses ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                </div>
 
-                {team.length === 0 ? (
-                  <p style={{
-                    color: 'var(--pc-text)',
-                    opacity: 0.6,
-                    fontSize: '14px',
-                    textAlign: 'center',
-                    margin: '40px 10px'
-                  }}>
-                    {t('addPokemonPrompt', lang)}
-                  </p>
-                ) : (
-                  <div className="tally-grid-container">
-                    <div className="tally-grid">
-                      {ALL_TYPES_LIST.map(type => (
-                        <div key={type} className="tally-row">
-                          <span className="type-icon" style={{ backgroundColor: getTypeColor(type) }}>
-                            {type.slice(0, 3)}
-                          </span>
+                {!collapsed.weaknesses && (
+                  <div className="section-content">
+                    {team.length === 0 ? (
+                      <p style={{
+                        color: 'var(--pc-text)',
+                        opacity: 0.6,
+                        fontSize: '14px',
+                        textAlign: 'center',
+                        margin: '20px 0'
+                      }}>
+                        {t('addPokemonPrompt', lang)}
+                      </p>
+                    ) : (
+                      <div className="tally-grid-container">
+                        <div className="tally-grid">
+                          {ALL_TYPES_LIST.map(type => (
+                            <div key={type} className="tally-row">
+                              <span className="type-icon" style={{ backgroundColor: getTypeColor(type) }}>
+                                {type.slice(0, 3)}
+                              </span>
 
-                          {[0, 1, 2, 3, 4, 5].map(slotIdx => {
-                            const p = team[slotIdx];
-                            if (!p) return <div key={slotIdx} className="tally-mark" />;
+                              {[0, 1, 2, 3, 4, 5].map(slotIdx => {
+                                const p = team[slotIdx];
+                                if (!p) return <div key={slotIdx} className="tally-mark" />;
 
-                            const mult = getPokemonMultiplier(p.types.map(t => t.type.name), type);
-                            let tallyClass = "tally-mark";
+                                const mult = getPokemonMultiplier(p.types.map(t => t.type.name), type);
+                                let tallyClass = "tally-mark";
 
-                            if (mult > 1) tallyClass += " weak";
-                            else if (mult < 1) tallyClass += " resist";
+                                if (mult > 1) tallyClass += " weak";
+                                else if (mult < 1) tallyClass += " resist";
 
+                                return (
+                                  <div
+                                    key={slotIdx}
+                                    className={tallyClass}
+                                    title={`${p.name} vs ${type}: x${mult}`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* TEAM STRENGTHS */}
+              <div className="analysis-section glass-panel">
+                <div
+                  className="section-header"
+                  onClick={() => setCollapsed(prev => ({ ...prev, strengths: !prev.strengths }))}
+                >
+                  <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <Swords size={20} /> {t('teamStrengthsTitle', lang)}
+                  </h3>
+                  {collapsed.strengths ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                </div>
+
+                {!collapsed.strengths && (
+                  <div className="section-content">
+                    {team.length === 0 ? (
+                      <p style={{
+                        color: 'var(--pc-text)',
+                        opacity: 0.6,
+                        fontSize: '14px',
+                        textAlign: 'center',
+                        margin: '20px 0'
+                      }}>
+                        {t('addPokemonPrompt', lang)}
+                      </p>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: '12px', color: 'var(--pc-text)', opacity: 0.6, marginBottom: '16px' }}>
+                          {t('teamStrengthsDesc', lang)}
+                        </p>
+
+                        <div className="tally-grid">
+                          {ALL_TYPES_LIST.map(type => {
+                            const count = teamStrengthsMatrix[type] || 0;
                             return (
-                              <div
-                                key={slotIdx}
-                                className={tallyClass}
-                                title={`${p.name} vs ${type}: x${mult}`}
-                              />
+                              <div key={type} className="tally-row" style={{ opacity: count > 0 ? 1 : 0.3 }}>
+                                <div className="type-icon" style={{ background: `var(--type-${type})` }}>
+                                  {type.substring(0, 3)}
+                                </div>
+                                <div style={{ display: 'flex', gap: '2px' }}>
+                                  {[...Array(6)].map((_, i) => (
+                                    <div
+                                      key={i}
+                                      className={`tally-mark ${i < count ? 'resist' : ''}`}
+                                      style={{
+                                        background: i < count ? '#10b981' : undefined,
+                                        boxShadow: i < count ? '0 0 8px rgba(16, 185, 129, 0.7)' : undefined
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
-                      ))}
-                    </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* TEAM RECOMMENDATIONS */}
-              <div style={{
-                background: 'var(--pc-bg)',
-                opacity: 0.9,
-                padding: '16px',
-                borderRadius: '12px',
-                border: '1px solid var(--pc-border)',
-                marginTop: '16px'
-              }}>
-                <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                  <Search size={20} /> {t('recommendationsTitle', lang)}
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--pc-text)', opacity: 0.6, marginBottom: '16px' }}>
-                  {t('recsDescription', lang)}
-                </p>
+              <div className="analysis-section glass-panel">
+                <div
+                  className="section-header"
+                  onClick={() => setCollapsed(prev => ({ ...prev, recommendations: !prev.recommendations }))}
+                >
+                  <h3 style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <Search size={20} /> {t('recommendationsTitle', lang)}
+                  </h3>
+                  {collapsed.recommendations ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                </div>
 
-                {loadingRecs ? (
-                  <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('loadingRecs', lang)}</p>
-                ) : recommendations.length > 0 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
-                    {recommendations.map(p => (
-                      <div
-                        key={p.name}
-                        onClick={() => addToTeam(p)}
-                        style={{
-                          background: 'rgba(56, 189, 248, 0.05)',
-                          border: '1px solid var(--pc-border)',
-                          borderRadius: '8px',
-                          padding: '10px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '4px',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}
-                        className="recommendation-card"
-                      >
-                        <img 
-                          src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-viii/icons/${p.id}.png`}
-                          alt={p.name}
-                          style={{ imageRendering: 'pixelated', width: '40px' }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
-                          }}
-                        />
-                        <span style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'capitalize', textAlign: 'center' }}>
-                          {p.name.replace('-', ' ')}
-                        </span>
-                        <span style={{ fontSize: '11px', opacity: 0.6 }}>
-                          {t('usageRate', lang, { rate: (p.usage * 100).toFixed(1) })}
-                        </span>
+                {!collapsed.recommendations && (
+                  <div className="section-content">
+                    <p style={{ fontSize: '12px', color: 'var(--pc-text)', opacity: 0.6, marginBottom: '16px' }}>
+                      {t('recsDescription', lang)}
+                    </p>
+
+                    {loadingRecs ? (
+                      <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('loadingRecs', lang)}</p>
+                    ) : recommendations.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px' }}>
+                        {recommendations.map(p => (
+                          <div
+                            key={p.name}
+                            onClick={() => addToTeam(p)}
+                            style={{
+                              background: 'rgba(56, 189, 248, 0.05)',
+                              border: '1px solid var(--pc-border)',
+                              borderRadius: '8px',
+                              padding: '10px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '4px',
+                              position: 'relative',
+                              overflow: 'hidden'
+                            }}
+                            className="recommendation-card"
+                          >
+                            <img
+                              src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-viii/icons/${p.id}.png`}
+                              alt={p.name}
+                              style={{ imageRendering: 'pixelated', width: '40px' }}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+                              }}
+                            />
+                            <span style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'capitalize', textAlign: 'center' }}>
+                              {p.name.replace('-', ' ')}
+                            </span>
+                            <span style={{ fontSize: '11px', opacity: 0.6 }}>
+                              {t('usageRate', lang, { rate: (p.usage * 100).toFixed(1) })}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('noSets', lang)}</p>
+                    )}
                   </div>
-                ) : (
-                  <p style={{ fontSize: '14px', opacity: 0.5 }}>{t('noSets', lang)}</p>
                 )}
               </div>
             </>

@@ -61,3 +61,29 @@ export const calculateTeamWeaknesses = (teamTypes: string[][]): Record<string, n
 
   return weaknessCount;
 };
+
+export const calculateTeamStrengths = (teamTypes: string[][]): Record<string, number> => {
+  // Returns a map of Type -> Number of Pokemon who can hit it super-effectively
+  const strengthCount: Record<string, number> = {};
+  
+  ALL_TYPES_LIST.forEach(t => strengthCount[t] = 0);
+
+  teamTypes.forEach(pokemonTypes => {
+    // For each type the pokemon HAS, find what it hits super-effectively
+    const coveredTypes = new Set<string>();
+    
+    pokemonTypes.forEach(pType => {
+      ALL_TYPES_LIST.forEach(targetType => {
+        const multiplier = TYPE_CHART[pType]?.[targetType];
+        if (multiplier > 1) {
+          coveredTypes.add(targetType);
+        }
+      });
+    });
+
+    // Add this pokemon's coverage to the total count
+    coveredTypes.forEach(t => strengthCount[t]++);
+  });
+
+  return strengthCount;
+};
