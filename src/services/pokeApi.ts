@@ -2,6 +2,10 @@ export interface PokemonListResult {
   name: string;
   url: string;
   id: number;
+  num?: number;
+  formCategory?: string;
+  tier?: string;
+  doublesTier?: string;
 }
 
 export interface PokemonType {
@@ -53,13 +57,17 @@ export const GENERATIONS = [
   { gen: 9, name: "Generation IX", maxId: 1025, smogonFormat: "gen9ou" }
 ];
 
-export const fetchPokemonList = async (maxId: number): Promise<PokemonListResult[]> => {
-  const response = await fetch(`https://pokeapi.co/api/v2/pokemon?limit=${maxId}`);
+export const fetchPokemonList = async (): Promise<PokemonListResult[]> => {
+  const response = await fetch(`https://pokeapi.co/api/v2/pokemon?limit=100000`);
   const data = await response.json();
-  return data.results.map((p: any, index: number) => ({
-    ...p,
-    id: index + 1
-  }));
+  return data.results.map((p: any) => {
+    const parts = p.url.split('/');
+    const id = parseInt(parts[parts.length - 2], 10);
+    return {
+      ...p,
+      id
+    };
+  });
 };
 
 export const fetchPokemonDetails = async (idOrName: string | number): Promise<PokemonDetails> => {

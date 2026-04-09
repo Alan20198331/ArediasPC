@@ -26,7 +26,7 @@ const CACHE: Record<string, SmogonFormatData> = {};
 
 // Tier priority (Singles)
 const TIER_PRIORITY = [
-  'uber',
+  'ubers',
   'ou',
   'uu',
   'ru',
@@ -107,9 +107,9 @@ const buildFormatsToTry = (
     const prefix = `gen${gen}`;
 
     const tiers =
-      baseFormat === 'ou'
+      baseFormat === 'singles'
         ? TIER_PRIORITY
-        : baseFormat === 'doublesou'
+        : baseFormat === 'doubles'
           ? DOUBLES_PRIORITY
           : [baseFormat];
 

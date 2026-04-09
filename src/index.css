@@ -158,6 +158,54 @@ h3 {
   min-height: 0;
 }
 
+@media (max-width: 1200px) {
+  .app-container {
+    height: auto;
+    min-height: 100vh;
+    padding: 12px;
+  }
+  
+  .header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .main-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    overflow-y: visible;
+    min-height: auto;
+  }
+  
+  .pc-box {
+    height: 500px; /* fixed height for scrollable box on mobile */
+  }
+
+  .team-roster {
+    height: auto;
+    padding: 16px;
+    align-content: start;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  .analysis-panel {
+    height: auto;
+    overflow-y: visible;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .team-roster {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
@@ -341,6 +389,7 @@ h3 {
   padding-right: 8px;
   min-height: 0;
   flex: 1;
+  align-content: start;
 }
 
 .box-cell {
@@ -362,9 +411,16 @@ h3 {
 }
 
 .box-cell img {
-  width: 40px;
-  height: 40px;
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
   image-rendering: pixelated;
+  transform: scale(1.25);
+  transition: transform 0.2s;
+}
+
+.box-cell:hover img {
+  transform: scale(1.4);
 }
 
 .box-cell.selected {
